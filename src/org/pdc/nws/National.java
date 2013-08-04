@@ -35,8 +35,8 @@ public class National {
 		
 		//////////////////////////////////////////////
 		// Timeouts - to be trapped later 
-		int connectTimeoutinMilliseconds = 1000;
-		int readTimeoutinMilliseconds = 1000;
+		int connectTimeoutinMilliseconds = 2147483647;
+		int readTimeoutinMilliseconds = 2147483647;
 		
 
 		try
@@ -55,9 +55,10 @@ public class National {
           */
           
           // construct cap feed parser with boolean validate
-          CapFeedParser atomSmashher = new CapFeedParser(true); 
+          CapFeedParser atomSmasher = new CapFeedParser(true); 
           
-          SyndFeed feed = atomSmashher.parseFeed(in);
+          SyndFeed feed = atomSmasher.parseFeed(in);
+          in.close();
 	      
           List<SyndEntry> entries = feed.getEntries();
           //out("Size = " + entries.size());
@@ -65,30 +66,22 @@ public class National {
           
 		  for (SyndEntry entry : entries)
 		  {
-			  System.out.println(entry.getTitle());
-				System.out.println(entry.getUri());
-				System.out.println(entry.getDescription().getValue());
-				List<Element> foreignMarkups = (List<Element>) entry.getForeignMarkup();
-				for (Element foreignMarkup : foreignMarkups) {
-					
-					System.out.println("Foreign markup "
-							+ foreignMarkup.getNamespaceURI() + "/"
-							+ foreignMarkup.getName() + " = "
-							+ foreignMarkup.getText());
-                    
-					// look one level below
-					for (Element child : (List<Element>) foreignMarkup.getChildren())
-					{
-						System.out.println("Child markup "
-								+ child.getNamespaceURI() + "/"
-								+ child.getName() + " = "
-								+ child.getText());
-					}
-					
-					//out(foreignMarkup.getText());
-				}
-				System.out.println("-----------------");
-
+			  out(entry.getTitle() + "Link: " + entry.getLink());
+			  
+			  URL capUrl = new URL(entry.getLink());
+			  
+			  URLConnection con = capUrl.openConnection();
+	          // setting timeouts 
+	          con.setConnectTimeout(connectTimeoutinMilliseconds);
+	          con.setReadTimeout(readTimeoutinMilliseconds);
+	          in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+	          StringBuffer sb = new StringBuffer();
+	          while ((inputLine = in.readLine()) != null) sb.append(inputLine);
+	          in.close();
+	          out(sb.toString() + "\n");
+	          
+	          Alert alert = atomSmasher.parseAlert(sb.toString());
+	          alerts.add(alert);
 		  }          
           
 		  
@@ -97,7 +90,7 @@ public class National {
              System.out.println(alert.getNote());
           }
           
-          in.close();
+          //in.close();
 		}
 		catch (Exception e)
 		{
