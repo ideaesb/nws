@@ -12,6 +12,7 @@ import com.google.publicalerts.cap.feed.*;
 import com.sun.syndication.feed.module.Module;
 import com.sun.syndication.feed.synd.*;
 
+import org.apache.commons.lang3.*;
 import org.jdom.Element;
 
 
@@ -66,22 +67,32 @@ public class National {
           
 		  for (SyndEntry entry : entries)
 		  {
-			  out(entry.getTitle() + "Link: " + entry.getLink());
 			  
-			  URL capUrl = new URL(entry.getLink());
-			  
-			  URLConnection con = capUrl.openConnection();
-	          // setting timeouts 
-	          con.setConnectTimeout(connectTimeoutinMilliseconds);
-	          con.setReadTimeout(readTimeoutinMilliseconds);
-	          in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-	          StringBuffer sb = new StringBuffer();
-	          while ((inputLine = in.readLine()) != null) sb.append(inputLine);
-	          in.close();
-	          out(sb.toString() + "\n");
+			  String fname = "c:/temp/alerts/" + StringUtils.substringAfterLast(entry.getLink(), "?x=") + ".xml";
+			  File xmlfile = new File(fname);
 	          
+	          if (!xmlfile.exists())
+	          {
+				  URL capUrl = new URL(entry.getLink());
+				  
+				  URLConnection con = capUrl.openConnection();
+		          // setting timeouts 
+		          con.setConnectTimeout(connectTimeoutinMilliseconds);
+		          con.setReadTimeout(readTimeoutinMilliseconds);
+		          in = new BufferedReader(new InputStreamReader(con.getInputStream()));
+		          StringBuffer sb = new StringBuffer();
+		          while ((inputLine = in.readLine()) != null) sb.append(inputLine);
+		          in.close();
+		          out(entry.getTitle() + "Link: " + entry.getLink());
+	        	  FileWriter fwr = new FileWriter(fname, false);
+	        	  fwr.write(sb.toString());
+	        	  fwr.close();
+	          }
+	          
+	          /*
 	          Alert alert = atomSmasher.parseAlert(sb.toString());
 	          alerts.add(alert);
+	          */
 		  }          
           
 		  
