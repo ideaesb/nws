@@ -1,0 +1,53 @@
+<project name="nws" default="zipf">
+	
+
+	
+	<target name="zipf" depends="jarfile,clean">
+		<zip destfile="alerts.zip" basedir="." excludes=".settings, dist, bin, .classpath, .project, build.xml, alerts.zip" />
+	</target>
+	
+	<target name="clean">
+	  	<delete dir="cache" />
+	    <mkdir dir="cache" />
+	  	<delete dir="logs" />
+	    <mkdir dir="logs" />
+	  	<delete dir="candidateHazards" />
+	    <mkdir dir="candidateHazards" />
+		<delete file="alerts.zip" />
+	</target>
+	
+	<target name="jarfile" depends="compile">
+	
+		<jar destfile="caps.jar" basedir="bin">
+		  <manifest>
+		  	<attribute name="Built-By" value="Uday Kari"/>
+		  	<attribute name="Implementation-Vendor" value="Pacific Disaster Center"/>
+		  	<attribute name="Implementation-Title" value="NWS CAP Atom Feed Reader"/>
+		  	<attribute name="Implementation-Version" value="0.1-Alpha ${TODAY}"/>
+		  	<attribute name="Main-Class" value="org.pdc.fetch.SimplestReader"/>
+		  	<attribute name="Class-Path" value="lib/commons-lang-2.5.jar lib/commons-collections-3.2.1.jar lib/commons-configuration-1.9.jar  
+		  		                                lib/commons-logging-1.1.3.jar lib/concurrent-1.3.4.jar lib/ehcache-ee-2.7.3.jar lib/jdom-1.1.3.jar
+		  		                                lib/log4j-1.2.17.jar lib/rome-1.0.jar lib/slf4j-api-1.7.5.jar lib/slf4j-log4j12-1.7.5.jar "/>
+   		  </manifest>
+		</jar>
+		
+		
+	</target>
+		
+
+		
+		
+		 <path id="libraries">
+		 	<fileset dir="lib">
+		 	 <include name="**/*.jar"/>
+		 	</fileset>
+		  </path>
+	     <property name="classpath" refid="libraries" />
+	
+  <target name="compile" depends="clean">
+    <javac srcdir="src" destdir="bin" includeantruntime="false"
+		   classpath="${classpath}" debug="true" deprecation="true" optimize="false" />
+	</target>
+
+	
+</project>
