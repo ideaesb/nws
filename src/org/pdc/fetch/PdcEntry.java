@@ -82,10 +82,14 @@ public class PdcEntry implements Serializable
   
   //private DateTimeFormatter dateTimeFormatter = ISODateTimeFormat.dateTimeNoMillis();
   
-	
+  /**
+   * Build out of SyndEntry, copy, parse into itself 
+   * @param entry
+   */
   public PdcEntry(SyndEntry entry) 
   {
-    syndEntry = entry; 	    
+    syndEntry = entry; 	  
+    copySyndEntry();
   }
 
   /**
@@ -104,23 +108,35 @@ public class PdcEntry implements Serializable
   */
   public String getKey()
   {
+	
 	String key = syndEntry.getLink() + "." + syndEntry.getPublishedDate().getTime();
+	
+	if (havePvtec) 
+	{
+		  String [] vtecArr = StringUtils.split(vtec, "/");
+          key += "." + StringUtils.replace(vtecArr[0], "-", ".");
+          
+          if (haveHvtec)
+          {
+              key += "." + vtecArr[2];
+          }
+
+	}
+	
 	// try hashing it
 	try
 	{
+		logger.info("Attempting MD5 Hashing key = " + key);
 		key = getMD5hash(key);
 	}
 	catch (Exception e)
 	{
-		
+		logger.warn("FAILED to Hash key " + e.toString());
+		key = StringUtils.substringAfterLast(key, "=");	
 	}
 	
-	// will fire only if MD5 hash failed AND link is still http
-	if (StringUtils.startsWithIgnoreCase(key,"http"))
-	{
-		key = StringUtils.substringAfterLast(key, "=");
-	}
 	
+	logger.info("Generated key " + key + " for feed entry >> " + syndEntry.getTitle() + " << updated " + syndEntry.getUpdatedDate());
 	return key;
   }
 	 
@@ -140,7 +156,7 @@ public class PdcEntry implements Serializable
    */
   public String getProperties()
   {
-	  copySyndEntry();
+	  //copySyndEntry();
 	  java.io.StringWriter swr =  new java.io.StringWriter();
 	  try
 	  {
@@ -161,7 +177,7 @@ public class PdcEntry implements Serializable
 
   public String getXML()
   {
-	  copySyndEntry();
+	  //copySyndEntry();
 	  java.io.StringWriter swr =  new java.io.StringWriter();
 	  
 	  Element entry = new Element("entry");
@@ -536,7 +552,7 @@ public class PdcEntry implements Serializable
   public void write(java.io.Writer w) throws java.io.IOException
   {
 	  // why here and not constructor ??? because no need for operation except if PdCEntry is new. 
-	  copySyndEntry();
+	  //copySyndEntry();
 
 	  // this is where the PdcEntry itself writes to file
 	  w.write("title="+this.syndEntry.getTitle());
