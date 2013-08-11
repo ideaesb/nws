@@ -1,33 +1,29 @@
 package org.pdc.fetch;
 
+import com.sun.syndication.feed.synd.SyndEntry;
+
 import java.io.Serializable;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.sun.syndication.feed.synd.SyndContent;
-import com.sun.syndication.feed.synd.SyndEntry;
-import com.sun.syndication.io.impl.BaseWireFeedParser;
-import com.sun.syndication.feed.module.content.ContentModule;
-
-import org.apache.wink.common.model.atom.AtomEntry;
 import org.apache.commons.configuration.PropertiesConfiguration;
+import org.apache.commons.lang.StringUtils;
 
-import org.joda.time.format.ISODateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
-
+import org.jdom.Attribute;
+import org.jdom.Document;
 import org.jdom.Element;
+import org.jdom.output.Format;
 import org.jdom.output.XMLOutputter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.commons.lang.StringUtils;
 
 /**
- * Thin wrapper on SyndEntry - convenience methods for generating unique identifiers from contents of SyndEntry,
- * output contents of the <entry> as in the NWS Feed, expanding out the VTEC codes   
+ * Thin serializable wrapper on SyndEntry for caching.  Also convenience methods for generating unique identifiers from contents of SyndEntry,
+ * output contents of the <entry> as in the NWS Feed, breaking out VTEC codes, flattening out the embedded CAP namespace for better readability   
  * @author Uday
  *
  */
@@ -60,6 +56,8 @@ public class PdcEntry implements Serializable
   
   private String[] capGeoCodeNames = {""};
   private String[] capGeoCodeValue = {""};
+  
+  public String vtec = "";
   
   private String pVtecProductClass = "";
   private String pVtecActions = "";
@@ -136,46 +134,163 @@ public class PdcEntry implements Serializable
   }
   
   
-  public String getForeignMarkup()
-  {
-	  List fms = (List) syndEntry.getForeignMarkup();
-	  
-	  StringBuilder sb = new StringBuilder();
-	  /*
-	  XMLOutputter xo = new XMLOutputter();
-	  sb.append(xo.outputString(fms));
-	  */
-	  
-	  for (Object fm: fms)  
-	  {
-		  Element jdomElem = (Element) fm;
-		  if (sb.length() > 0) sb.append(", "); 
-		  sb.append(jdomElem.getName() + "=" + jdomElem.getValue());
-		  
-	  }
-	  
-	  return sb.toString();
-  }
-  public String toString()
-  {
-	  return syndEntry.toString();
-  }
-
   /**
-   * this will be the main output to file
-   * @return
+   * Vomits self in properties format
+   * @return String representation of PdcEntry, as written to feed entry file 
    */
   public String getProperties()
   {
 	  copySyndEntry();
-	  return syndEntry.toString();
-  }
-  
-  public String getXML()
-  {
-	  return "";
+	  java.io.StringWriter swr =  new java.io.StringWriter();
+	  try
+	  {
+		  write(swr);
+	  }
+	  catch (Exception e)
+	  {
+		  logger.info("PdcEntry getProperties failed to write into string writer " + e.toString() );
+	  }
+	  return swr.toString();
   }
 
+  public String toString()
+  {
+	  // for now just properties 
+	  return getProperties();
+  }
+
+  public String getXML()
+  {
+	  copySyndEntry();
+	  java.io.StringWriter swr =  new java.io.StringWriter();
+	  
+	  Element entry = new Element("entry");
+	  Document doc = new Document(entry);
+	  doc.setRootElement(entry);
+
+	  
+	  entry.addContent(new Element("title").setText(this.title));
+	  entry.addContent(new Element("updated").setText(this.syndEntry.getUpdatedDate().toString()));
+	  entry.addContent(new Element("published").setText(this.syndEntry.getPublishedDate().toString()));
+	  entry.addContent(new Element("link").setText(this.link));
+
+	  entry.addContent(new Element("id").setText(this.id));
+	  entry.addContent(new Element("updatedMillisZulu").setText(this.updated));
+	  entry.addContent(new Element("publishedMillisZulu").setText(this.published));
+
+	  entry.addContent(new Element("author").setText(this.author));
+	  
+	  entry.addContent(new Element("summary").setText(this.summary));
+	  
+	  entry.addContent(new Element("capEvent").setText(this.capEvent));
+	  entry.addContent(new Element("capEffective").setText(this.capEffective));
+	  entry.addContent(new Element("capExpires").setText(this.capExpires));
+	  entry.addContent(new Element("capStatus").setText(this.capStatus));
+	  entry.addContent(new Element("capMessageType").setText(this.capMsgType));
+	  entry.addContent(new Element("capCategory").setText(this.capCategory));
+	  entry.addContent(new Element("capUrgency").setText(this.capUrgency));
+	  entry.addContent(new Element("capSeverity").setText(this.capSeverity));
+	  entry.addContent(new Element("capCertainty").setText(this.capCertainty));
+	  entry.addContent(new Element("capAreaDescription").setText(this.capAreaDesc));
+	  entry.addContent(new Element("capPolygon").setText(this.capPolygon));
+	  
+	  Element geocodes = new Element("capGeoCode");
+	  if (haveGeoCodes)
+	  {
+	    for (int i=0; i < capGeoCodeNames.length; i++)
+	    {
+	    	geocodes.addContent(new Element("capGeoName").setText(capGeoCodeNames[i]));
+	    	geocodes.addContent(new Element("capGeoValue").setText(capGeoCodeValue[i]));
+	    }
+	  }
+	  entry.addContent(geocodes);
+	  
+	  // vtec
+	  Element vtecElement = new Element("vtec");
+	  
+	  vtecElement.setAttribute(new Attribute("value", vtec));
+	  
+	  String [] vtecArr = StringUtils.split(vtec, "/");
+	  logger.info("VTEC (clean) = " + vtec);  logger.info("vtecArray SIZE created from split = " + vtecArr.length); 
+	  
+	  if (havePvtec)
+	  {
+        String [] pelements = StringUtils.split(vtecArr[0] , ".");
+        
+        // product class
+        Element k = new Element("productClass").setText(this.pVtecProductClass); k.setAttribute(new Attribute("k", pelements[0]));
+	    vtecElement.addContent(k);
+	    
+	    // actions 
+        Element aaa = new Element("actions").setText(this.pVtecActions); aaa.setAttribute(new Attribute("aaa", pelements[1]));
+	    vtecElement.addContent(aaa);
+	    
+	    // phenomena 
+        Element pp = new Element("phenomena").setText(this.pVtecPhenomena); pp.setAttribute(new Attribute("pp", pelements[3]));
+	    vtecElement.addContent(pp);
+
+	    // significance
+        Element sig = new Element("significance").setText(this.pVtecSignificance); sig.setAttribute(new Attribute("s", pelements[4]));
+	    vtecElement.addContent(sig);
+
+	    // etn
+	    vtecElement.addContent(new Element("eventTrackingNumber").setText(this.pVtecEventTrackingNumber));
+	    
+	    // begin date/time
+	    Element b = new Element("eventBeginDateTime").setText(this.pVtecBeginDate); b.setAttribute(new Attribute("fmt","yymmddThhnnZ"));
+	    vtecElement.addContent(b);
+	    // end date/time
+	    vtecElement.addContent(new Element("eventEndDateTime").setText(this.pVtecEndDate));
+	    
+	    Element hydro = new Element("hydro");
+	    
+	    if (haveHvtec)
+	    {
+    	  String [] helements = StringUtils.split(vtecArr[2] , ".");
+
+          // nws loc id
+          hydro.addContent(new Element("nwsLocationId").setText(this.hVtecNwsLocationId)); 
+
+          // severity
+          Element siv = new Element("floodSeverity").setText(this.hVtecFloodSeverity); siv.setAttribute(new Attribute("s", helements[1]));
+          hydro.addContent(siv);
+
+          // immediate cause
+          Element ic = new Element("immediateCause").setText(this.hVtecImmediateCause); ic.setAttribute(new Attribute("ic", helements[2]));
+          hydro.addContent(ic);
+
+  	      // end date/time
+          hydro.addContent(new Element("floodBeginDateTime").setText(this.hVtecBeginDate));
+          hydro.addContent(new Element("floodCrestDateTime").setText(this.hVtecFloodCrestDate));
+          hydro.addContent(new Element("floodEndDateTime").setText(this.hVtecEndDate));
+
+  	      // flood records status
+          Element fr = new Element("floodRecordStatus").setText(this.hVtecFloodRecordStatus); fr.setAttribute(new Attribute("fr", helements[6]));
+          hydro.addContent(fr);
+	    
+	    
+	    }
+	    vtecElement.addContent(hydro);
+	  }
+	  
+	  entry.addContent(vtecElement);
+	  
+	  
+	  try
+	  {
+  	    XMLOutputter xmlOutput = new XMLOutputter();
+		xmlOutput.setFormat(Format.getPrettyFormat());
+		xmlOutput.output(doc, swr);	  }
+	  catch (Exception e)
+	  {
+		  logger.info("PdcEntry getXML failed to write into string writer " + e.toString() );
+	  }
+	  return swr.toString();
+	  
+  }
+  
+  
+  
   /**
    * 
    * @param string
@@ -306,22 +421,51 @@ public class PdcEntry implements Serializable
 		  else if (StringUtils.containsIgnoreCase(jdomElem.getName(), "parameter" ))
 		  {
 			  List children = jdomElem.getChildren();
+			  
 			  // gotta have exactly two kids 
-			  if (children.isEmpty() || children.size() != 2)
+			  if (children.isEmpty())
 			  {
-				  logger.info("The paramter elments was found empty or NOT have exactly two children - ignoring");
+				  logger.info("The paramter elments was found empty - ignoring");
 				  continue;
 			  }
-			  
-			  // get the second element within <value> tags 
-			  Element vtecValueElement = (Element) children.get(1);
-			  
-			  
-			  if (sanityCheckVtec(vtecValueElement.getValue()))
+			  else if (children.size() != 2)
 			  {
-				  logger.info("Parsing VTEC " + vtecValueElement.getValue() + ", number of tokens when split by forward slash = " + StringUtils.split(vtecValueElement.getValue(), "/").length);
+				  logger.info("The paramter elments was found to NOT have exactly two children - did the NWS CAP ATOM VTEC release change, add more parameters ??????????");
+			  }
+			  
+			  logger.info("iterating through children of <cap:parameter>");
+			  for (Object child: children)
+			  {
+				  Element paramElem = (Element) child;
+				  
+				  if (StringUtils.containsIgnoreCase(paramElem.getValue(), "VTEC" ))
+				  {
+					 // nothing to do - 
+					  logger.info("Found <valueName>VTEC</valueName> child of parameter");
+				  }
+				  else if (StringUtils.equalsIgnoreCase(paramElem.getName(), "value"))  // the VTEC value is within <value> named child element of <cap:parameter>   
+				  {
+					  logger.info("Found <value> named element child of parameter");
+					  vtec = StringUtils.trimToEmpty(paramElem.getValue());
+					  if (vtec.length() == 0)
+					  {
+						  logger.info("VTEC <value> tag is EMPTY - ignoring");
+						  continue;
+					  }
+					  else
+					  {
+						  logger.info("Raw VTEC, warts and all, within <value> tag " + vtec);
+					  }
+				  }
+  
+			  }
+			  
+			  
+			  if (sanityCheckVtec(vtec))
+			  {
+				  logger.info("Parsing VTEC " + vtec + ", number of tokens when split by forward slash = " + StringUtils.split(vtec, "/").length);
 
-				  String [] vtecArr = StringUtils.split(vtecValueElement.getValue(), "/");
+				  String [] vtecArr = StringUtils.split(vtec, "/");
 				  
 				  
 				  // count non-empty
@@ -331,10 +475,13 @@ public class PdcEntry implements Serializable
 					  if (StringUtils.isNotBlank(vtecArr[i])) nonEmpty.add(vtecArr[i]);
 				  }
 				  
+				  
 				  if (nonEmpty.size() > 0)
 				  {
 					  // P-VTEC
 					  logger.info("P-VTEC...parse BEGIN");
+					  // clean-up vtec 
+					  vtec = "/"+StringUtils.trimToEmpty(nonEmpty.get(0))+"/";
 					  
 					  String [] pelements = StringUtils.split(nonEmpty.get(0), ".");
 					  
@@ -356,7 +503,10 @@ public class PdcEntry implements Serializable
 						  // H-VTEC
 	
 				    	  logger.info("Hydro-VTEC...parse BEGIN");
-						  String [] helements = StringUtils.split(nonEmpty.get(1), ".");
+						  // clean-up vtec - add hydro after space
+						  vtec += " /" + StringUtils.trimToEmpty(nonEmpty.get(1)) + "/";
+
+				    	  String [] helements = StringUtils.split(nonEmpty.get(1), ".");
 	
 						  
 						  hVtecNwsLocationId  =  helements[0]; logger.info("Location ID " + hVtecNwsLocationId);
@@ -374,7 +524,7 @@ public class PdcEntry implements Serializable
 			  }
 			  else
 			  {
-				  logger.info("VTEC codes are empty or possibly corrupted " + vtecValueElement.getValue() + ".... skipped parse ");
+				  logger.info("VTEC codes are empty or possibly corrupted " + vtec + ".... skipped parse ");
 			  }
 
 		  }
@@ -387,23 +537,23 @@ public class PdcEntry implements Serializable
   {
 	  // why here and not constructor ??? because no need for operation except if PdCEntry is new. 
 	  copySyndEntry();
+
 	  // this is where the PdcEntry itself writes to file
 	  w.write("title="+this.syndEntry.getTitle());
+	  writeln(w,"updatedDate="+this.syndEntry.getUpdatedDate());
+	  writeln(w,"publishedDate="+this.syndEntry.getPublishedDate());
 	  
 	  writeln(w,"#  Last Updated - milliseconds since Epoch January 1, 1970 00.00.00 UNIVERSAL Time (UTC/Zulu)");
 	  writeln(w,"updatedMillis="+this.updated);
-	  writeln(w,"updatedDate="+this.syndEntry.getUpdatedDate());
-
-	  writeln(w,"#  Last Published - milliseconds since Epoch January 1, 1970 00.00.00 UNIVERSAL Time (UTC/Zulu)");
 	  writeln(w,"publishedMillis="+this.published);
-	  writeln(w,"publishedDate="+this.syndEntry.getPublishedDate());
 	  
+	  writeln(w,"URL="+this.link);
+	  writeln(w,"author="+this.author);
+
 	  writeln(w,"#  This is the Embdedded CAP Feed Identifier extracted from the URL after the equal sign"); 
 	  writeln(w,"id="+this.id);
 	  writeln(w,"summary="+this.summary);
 	  
-	  writeln(w,"URL="+this.link);
-	  writeln(w,"author="+this.author);
 	  
 	  writeln(w,"#  Foreign Markup (CAP info embedded in this Atom \"Index\") ------------------ ");
 	  writeln(w,"cap.event="+this.capEvent);
@@ -426,19 +576,24 @@ public class PdcEntry implements Serializable
 
 		  for (int i=0; i < capGeoCodeNames.length; i++)
      	  {
-		    writeln(w,"cap.geocode="+ capGeoCodeNames[i] + "," + capGeoCodeValue[i]);
+		    writeln(w,"cap.geocode."+i+"="+ capGeoCodeNames[i] + "," + capGeoCodeValue[i]);
 	      }
 	  }
 
 	  writeln(w,"# VTEC if available, omitted otherwise  ------------------  ");
 
+	  String [] vtecArr = StringUtils.split(vtec, "/");
+	  logger.info("VTEC (clean) = " + vtec);  logger.info("vtecArray SIZE created from split = " + vtecArr.length); 
+	  writeln(w,"vtec.constructor="+this.vtec);
+	  writeln(w,"#");
 	  if (havePvtec)
 	  {
-		  writeln(w,"vtec.ProductClass= "+this.pVtecProductClass);
-		  writeln(w,"vtec.Actions="+this.pVtecActions);
+		  String [] pelements = StringUtils.split(vtecArr[0] , ".");
+		  writeln(w,"vtec.ProductClass="+ pelements[0] + ", " + this.pVtecProductClass);
+		  writeln(w,"vtec.Actions="+ pelements[1] + ", " + this.pVtecActions);
 		  writeln(w,"vtec.OfficeId="+this.pVtecOfficeId);
-		  writeln(w,"vtec.Phenomena="+this.pVtecPhenomena);
-		  writeln(w,"vtec.Significance="+this.pVtecSignificance);
+		  writeln(w,"vtec.Phenomena="+ pelements[3] + ", " + this.pVtecPhenomena);
+		  writeln(w,"vtec.Significance="+ pelements[4] + ", " + this.pVtecSignificance);
 		  writeln(w,"vtec.EventTrackingNumber="+this.pVtecEventTrackingNumber);
 		  writeln(w,"vtec.BeginDate="+this.pVtecBeginDate);
 		  writeln(w,"vtec.EndDate="+this.pVtecEndDate);
@@ -447,13 +602,14 @@ public class PdcEntry implements Serializable
 	
 		  if (haveHvtec)
 		  {
+			  String [] helements = StringUtils.split(vtecArr[2] , ".");
 			  writeln(w,"vtec.hydro.NwsLocationId="+this.hVtecNwsLocationId);
-			  writeln(w,"vtec.hydro.FloodSeverity="+this.hVtecFloodSeverity);
-			  writeln(w,"vtec.hydro.ImmediateCause="+this.hVtecImmediateCause);
+			  writeln(w,"vtec.hydro.FloodSeverity="+ helements[1] + ", " + this.hVtecFloodSeverity);
+			  writeln(w,"vtec.hydro.ImmediateCause="+ helements[2] + ", " + this.hVtecImmediateCause);
 			  writeln(w,"vtec.hydro.BeginDate="+this.hVtecBeginDate);
 			  writeln(w,"vtec.hydro.FloodCrestDate="+this.hVtecFloodCrestDate);
 			  writeln(w,"vtec.hydro.EndDate="+this.hVtecEndDate);
-			  writeln(w,"vtec.hydro.FloodRecordStatus="+this.hVtecFloodRecordStatus);
+			  writeln(w,"vtec.hydro.FloodRecordStatus="+ helements[6] + ", " + this.hVtecFloodRecordStatus);
 		  }
 	  }
   }

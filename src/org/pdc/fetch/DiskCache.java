@@ -10,8 +10,12 @@ public class DiskCache
 
 	  private static final CacheManager  cacheManager  = new CacheManager();
 	  
-	  public DiskCache() {
-	    /**/
+	  int m_tti = 60*60*24*7;
+	  int m_ttl = 60*60*24*30;
+	  
+	  public DiskCache(int tti, int ttl) 
+	  {
+	    m_tti = tti; m_ttl = ttl;  
 	  }
 
 	  public PdcEntry get(String key) 
@@ -28,7 +32,7 @@ public class DiskCache
 		  }
 		  else
 		  {
-			  Element elem = new Element(entry.getKey(), entry, 60*60*24*7, 60*60*24*30);
+			  Element elem = new Element(entry.getKey(), entry, m_tti, m_ttl);
 			  getCache().put(elem);
 			  return true;
 		  }
