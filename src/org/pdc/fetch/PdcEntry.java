@@ -78,6 +78,7 @@ public class PdcEntry implements Serializable
   private String hVtecImmediateCause="";
   private String hVtecFloodRecordStatus="";
   
+  private boolean haveGeoCodes = false;
   private boolean havePvtec = false;
   private boolean haveHvtec = false;
   
@@ -264,9 +265,13 @@ public class PdcEntry implements Serializable
 		  }
 		  else if (StringUtils.containsIgnoreCase(jdomElem.getName(), "geocode" ))
 		  {
-	  
 			  List gcodes = (List) jdomElem.getChildren();
 			  logger.info("Entering Geo Code.  Number of geocode children (names and values)  " + gcodes.size());
+
+			  // per jdom, an empty list is returned if no kids
+			  // capGeoCodeNames, capGeoCodeValue will remain empty 
+			  if (gcodes.isEmpty()) continue;
+			  else haveGeoCodes = true;
 			  
 			  List<String> gnames= new ArrayList <String>();
 			  List<String> gvalues= new ArrayList <String>();
@@ -297,38 +302,26 @@ public class PdcEntry implements Serializable
 			  }
 			  
 			  
-			  /*
-			  capGeoCodeNames = capGeoCodeValue = new String[gcodes.size()/2];
-			  
-			  for (int i=0; i < gcodes.size(); i=i+2)
-			  {
-				  Element glement1 = (Element) gcodes.get(i);
-				  capGeoCodeNames[i]= glement1.getValue();
-				  
-				  Element glement2 = (Element) gcodes.get(i+1);
-				  capGeoCodeValue [i] = glement2.getValue();
-			  }
-			  */
-			  
 		  }
 		  else if (StringUtils.containsIgnoreCase(jdomElem.getName(), "parameter" ))
 		  {
 			  List children = jdomElem.getChildren();
-			  Element vtecValue = (Element) children.get(1);
-			  
-			  // just log if-else 
-			  if (StringUtils.isNotBlank(vtecValue.getValue()))
+			  // gotta have exactly two kids 
+			  if (children.isEmpty() || children.size() != 2)
 			  {
-			    logger.info("Parsing VTEC " + vtecValue.getValue() + ", number of tokens when split by forward slash = " + StringUtils.split(vtecValue.getValue(), "/").length);
-			  }
-			  else
-			  {
-				  logger.info("VTEC Omitted...Skipping");
+				  logger.info("The paramter elments was found empty or NOT have exactly two children - ignoring");
+				  continue;
 			  }
 			  
-			  if (StringUtils.isNotBlank(vtecValue.getValue()))
+			  // get the second element within <value> tags 
+			  Element vtecValueElement = (Element) children.get(1);
+			  
+			  
+			  if (sanityCheckVtec(vtecValueElement.getValue()))
 			  {
-				  String [] vtecArr = StringUtils.split(vtecValue.getValue(), "/");
+				  logger.info("Parsing VTEC " + vtecValueElement.getValue() + ", number of tokens when split by forward slash = " + StringUtils.split(vtecValueElement.getValue(), "/").length);
+
+				  String [] vtecArr = StringUtils.split(vtecValueElement.getValue(), "/");
 				  
 				  
 				  // count non-empty
@@ -379,80 +372,90 @@ public class PdcEntry implements Serializable
 				  }
 				  
 			  }
+			  else
+			  {
+				  logger.info("VTEC codes are empty or possibly corrupted " + vtecValueElement.getValue() + ".... skipped parse ");
+			  }
+
 		  }
 		  
 	  }
   }
 		 
 
-  public void write(java.io.Writer writer) throws java.io.IOException
+  public void write(java.io.Writer w) throws java.io.IOException
   {
+	  // why here and not constructor ??? because no need for operation except if PdCEntry is new. 
 	  copySyndEntry();
 	  // this is where the PdcEntry itself writes to file
-	  writer.write("title="+this.title);
+	  w.write("title="+this.syndEntry.getTitle());
 	  
-	  writer.write("\n#  Last Updated - milliseconds since Epoch January 1, 1970 00.00.00 UNIVERSAL Time (UTC/Zulu)");
-	  writer.write("\nupdatedMillis="+this.updated);
-	  writer.write("\nupdatedDate="+this.syndEntry.getUpdatedDate());
+	  writeln(w,"#  Last Updated - milliseconds since Epoch January 1, 1970 00.00.00 UNIVERSAL Time (UTC/Zulu)");
+	  writeln(w,"updatedMillis="+this.updated);
+	  writeln(w,"updatedDate="+this.syndEntry.getUpdatedDate());
 
-	  writer.write("\n#  Last Published - milliseconds since Epoch January 1, 1970 00.00.00 UNIVERSAL Time (UTC/Zulu)");
-	  writer.write("\npublishedMillis="+this.published);
-	  writer.write("\npublishedDate="+this.syndEntry.getPublishedDate());
+	  writeln(w,"#  Last Published - milliseconds since Epoch January 1, 1970 00.00.00 UNIVERSAL Time (UTC/Zulu)");
+	  writeln(w,"publishedMillis="+this.published);
+	  writeln(w,"publishedDate="+this.syndEntry.getPublishedDate());
 	  
-	  writer.write("\n#  This is the Embdedded CAP Feed Identifier extracted from the URL after the equal sign"); 
-	  writer.write("\nid="+this.id);
-	  writer.write("\nsummary="+this.summary);
+	  writeln(w,"#  This is the Embdedded CAP Feed Identifier extracted from the URL after the equal sign"); 
+	  writeln(w,"id="+this.id);
+	  writeln(w,"summary="+this.summary);
 	  
-	  writer.write("\nURL="+this.link);
-	  writer.write("\nauthor="+this.author);
+	  writeln(w,"URL="+this.link);
+	  writeln(w,"author="+this.author);
 	  
-	  writer.write("\n#  Foreign Markup (CAP info embedded in this Atom \"Index\") ------------------ ");
-	  writer.write("\ncap.event="+this.capEvent);
-	  writer.write("\ncap.effectiveDate="+this.capEffective);
-	  writer.write("\ncap.expireDate="+this.capExpires);
-	  writer.write("\ncap.status="+this.capStatus);
-	  writer.write("\ncap.messageType="+this.capMsgType);
-	  writer.write("\ncap.category="+this.capCategory);
-	  writer.write("\ncap.urgency="+this.capUrgency);
-	  writer.write("\ncap.severity="+this.capSeverity);
-	  writer.write("\ncap.certainty="+this.capCertainty);
-	  writer.write("\ncap.areaDescripton="+this.capAreaDesc);
-	  writer.write("\ncap.polygon="+this.capPolygon);
+	  writeln(w,"#  Foreign Markup (CAP info embedded in this Atom \"Index\") ------------------ ");
+	  writeln(w,"cap.event="+this.capEvent);
+	  writeln(w,"cap.effectiveDate="+this.capEffective);
+	  writeln(w,"cap.expireDate="+this.capExpires);
+	  writeln(w,"cap.status="+this.capStatus);
+	  writeln(w,"cap.messageType="+this.capMsgType);
+	  writeln(w,"cap.category="+this.capCategory);
+	  writeln(w,"cap.urgency="+this.capUrgency);
+	  writeln(w,"cap.severity="+this.capSeverity);
+	  writeln(w,"cap.certainty="+this.capCertainty);
+	  writeln(w,"cap.areaDescripton="+this.capAreaDesc);
+	  writeln(w,"cap.polygon="+this.capPolygon);
 
-	  writer.write("\n#  Geocodes, if available, omitted otherwise  ------------------ ");
+	  writeln(w,"#  Geocodes, if available, omitted otherwise  ------------------ ");
 	  
-	  for (int i=0; i < capGeoCodeNames.length; i++)
+	  if (haveGeoCodes) 
 	  {
-		  writer.write("\ncap.geocode."+ capGeoCodeNames[i] + "=" + capGeoCodeValue[i]);
+		  writeln(w,"#  COMMA separated in key-value(s) format;  each key may have multiple values, which are separated by whitespace as-is from NWS feed------- ");
+
+		  for (int i=0; i < capGeoCodeNames.length; i++)
+     	  {
+		    writeln(w,"cap.geocode="+ capGeoCodeNames[i] + "," + capGeoCodeValue[i]);
+	      }
 	  }
 
-	  writer.write("\n#  P VTEC if available, omitted otherwise  ------------------  ");
+	  writeln(w,"# VTEC if available, omitted otherwise  ------------------  ");
 
 	  if (havePvtec)
 	  {
-		  writer.write("\nP-VTEC.ProductClass= "+this.pVtecProductClass);
-		  writer.write("\nP-VTEC.Actions="+this.pVtecActions);
-		  writer.write("\nP-VTEC.OfficeId="+this.pVtecOfficeId);
-		  writer.write("\nP-VTEC.Phenomena="+this.pVtecPhenomena);
-		  writer.write("\nP-VTEC.Significance="+this.pVtecSignificance);
-		  writer.write("\nP-VTEC.EventTrackingNumber="+this.pVtecEventTrackingNumber);
-		  writer.write("\nP-VTEC.BeginDate="+this.pVtecBeginDate);
-		  writer.write("\nP-VTEC.EndDate="+this.pVtecEndDate);
-	  }
-	  
-	  writer.write("\n#  Hydrological (H) VTEC if available ------------------ ");
+		  writeln(w,"vtec.ProductClass= "+this.pVtecProductClass);
+		  writeln(w,"vtec.Actions="+this.pVtecActions);
+		  writeln(w,"vtec.OfficeId="+this.pVtecOfficeId);
+		  writeln(w,"vtec.Phenomena="+this.pVtecPhenomena);
+		  writeln(w,"vtec.Significance="+this.pVtecSignificance);
+		  writeln(w,"vtec.EventTrackingNumber="+this.pVtecEventTrackingNumber);
+		  writeln(w,"vtec.BeginDate="+this.pVtecBeginDate);
+		  writeln(w,"vtec.EndDate="+this.pVtecEndDate);
 
-	  if (haveHvtec)
-	  {
-		  writer.write("\nH-VTEC.NwsLocationId="+this.hVtecNwsLocationId);
-		  writer.write("\nH-VTEC.FloodSeverity="+this.hVtecFloodSeverity);
-		  writer.write("\nH-VTEC.ImmediateCause="+this.hVtecImmediateCause);
-		  writer.write("\nH-VTEC.BeginDate="+this.hVtecBeginDate);
-		  writer.write("\nH-VTEC.FloodCrestDate="+this.hVtecFloodCrestDate);
-		  writer.write("\nH-VTEC.EndDate="+this.hVtecEndDate);
-		  writer.write("\nH-VTEC.FloodRecordStatus="+this.hVtecFloodRecordStatus);
+		  writeln(w,"#  Hydrological (H) VTEC if available ------------------ ");
+	
+		  if (haveHvtec)
+		  {
+			  writeln(w,"vtec.hydro.NwsLocationId="+this.hVtecNwsLocationId);
+			  writeln(w,"vtec.hydro.FloodSeverity="+this.hVtecFloodSeverity);
+			  writeln(w,"vtec.hydro.ImmediateCause="+this.hVtecImmediateCause);
+			  writeln(w,"vtec.hydro.BeginDate="+this.hVtecBeginDate);
+			  writeln(w,"vtec.hydro.FloodCrestDate="+this.hVtecFloodCrestDate);
+			  writeln(w,"vtec.hydro.EndDate="+this.hVtecEndDate);
+			  writeln(w,"vtec.hydro.FloodRecordStatus="+this.hVtecFloodRecordStatus);
+		  }
 	  }
-	  
   }
 		  
 	 
@@ -478,8 +481,87 @@ public class PdcEntry implements Serializable
 		  
 		  
 	  }
+	  
+	  private void writeln(java.io.Writer writer, String str) throws java.io.IOException
+	  {
+		  writer.write(System.getProperty("line.separator"));
+		  writer.write(StringUtils.trimToEmpty(str));   
+	  }
 
 	  
+	  
+	  private boolean sanityCheckVtec(String str)
+	  {
+		  boolean pass = true;
+		  
+		  // empty 
+		  if (StringUtils.isBlank(str))
+		  {
+			  logger.info("VTEC value Empty - nothing to parse");
+			  return false;
+		  }
+		  
+		  // must have slash or dash delimiters 
+		  if (StringUtils.contains(str, "/") && StringUtils.contains(str, "-"))
+		  {
+			  //ok
+		  }
+		  else
+		  {
+			  logger.info("VTEC value may be corrupt - no expected delimiters - forward slashes or dashes.");
+			  return false;
+		  }
+		  
+		  // split by slash should result in exactly two tokens
+		  
+		  // count non-empty
+		  String [] vtecArr = StringUtils.split(str, "/");
+		  List<String> nonEmpty= new ArrayList <String>();
+		  
+		  for (int i = 0; i < vtecArr.length; i++)
+		  {
+			  if (StringUtils.isNotBlank(vtecArr[i])) nonEmpty.add(vtecArr[i]);
+		  }
+		  
+		  if (nonEmpty.size() == 1 || nonEmpty.size() == 2)
+		  {
+			  // ok
+		  }
+		  else
+		  {
+			  logger.info("VTEC does not split by forward slash delimiter into one or two non-empty fragments - will not parse");
+			  return false; 
+		  }
+		  
+		  String [] pelements = StringUtils.split(nonEmpty.get(0), ".");
+		  if (pelements.length != 7)
+		  {
+              logger.info("P-VTEC does not have exactly 7 tokens when split by dot");			  
+			  return false;
+		  }
+		  
+		  String [] dateElements = StringUtils.split(pelements[6], "-");
+		  if (dateElements.length != 2)
+		  {
+              logger.info("P-VTEC date elements does not have exactly 2 tokens when split by dash");			  
+			  return false;
+		  }
+		  
+		  if (nonEmpty.size() == 2)
+		  {
+		    String [] helements = StringUtils.split(nonEmpty.get(1), ".");
+		    if (helements.length != 7)
+		    {
+              logger.info("Hydro H-VTEC does not have exactly 7 tokens when split by dot");			  
+			  return false;
+		    }
+		  }
+		  
+		  // more sophsticated hurdles can be put here to ensure dates
+		  
+		  
+		  return pass;
+	  }
 	  
 }
   
