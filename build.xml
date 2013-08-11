@@ -79,5 +79,11 @@
 		   classpath="${classpath}" debug="true" deprecation="true" optimize="false" />
 	</target>
 
+  <target name="deploy">
+	  	<delete dir="c:/temp/alerts" />
+	    <mkdir dir="c:/temp/alerts" />
+    <unzip src="alerts.zip" dest="c:/temp/alerts" />
+  </target>
+
 	
 </project>
